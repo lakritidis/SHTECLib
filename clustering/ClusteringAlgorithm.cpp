@@ -11,7 +11,7 @@ template <class T, class U> ClusteringAlgorithm<T,U>::ClusteringAlgorithm(class 
 		if (d != 8 && d != 9 && d != 9 && d != 10 && d != 11 && d != 12 && d != 13 && d != 14 && d != 15) {
 			printf("Invalid Algorithm ID\nPlease use\n\t08 : for Leader Clustering\n");
 			printf("\t09 : for Agglomerative Clustering\n\t10 : for DBSCAN\n");
-			printf("\t11 : for kMeans\n\t12 : for Spectral CLustering\n\t13 : for UPM/L2DV\n");
+			printf("\t11 : for kMeans\n\t12 : for Spectral CLustering\n\t13 : for UPM/VEPHC\n");
 			printf("\t14: for GSDMM\n\t15: for Manual Clustering\n");
 
 			printf("\n"); fflush(NULL);
@@ -189,28 +189,32 @@ template <> void ClusteringAlgorithm<Product, EntitiesGroup<Product> >::perform_
 
 
 /// MergeSplit Stage
-template <class T, class U> void ClusteringAlgorithm<T,U>::MergeSplit() {
+template <class T, class U> void ClusteringAlgorithm<T,U>::HC_Stage(Cluster<T> ** temp_clusters, _score_t T_h, _score_t T_c) {
 	uint32_t i = 0, j = 0, k = 0, t = 0, onum_clusters = 0;
 	_score_t sim = 0.0, max_sim = 0.0;
+	int32_t x = 0, cand_1 = -1, cand_2 = -1;
+	bool continue_merging = true;
 
 	T * ety, * rep;
 	class Cluster<T> * c = NULL, * cand = NULL, * CoD = new Cluster<T>(0);
 
-	printf("\tRunning MergeSplit Stage..."); fflush(NULL);
-
-	double Ts = 0.1, Tm = 0.1;
+	printf("\tRunning MergeSplit Stage (T_h = %4.2f - T_c = %4.2f)...", T_h, T_c); fflush(NULL);
 
 	/// For each cluster, sort the vendors by ID, compute the clustroid and identify the products
 	/// that are most similar to the clustroid.
 	for (i = 0; i < this->num_clusters; i++) {
-		this->clusters[i]->compute_clustroid();
+		temp_clusters[i]->compute_clustroid();
 	}
 
 	uint32_t deleted_entities = 0;
 
+	////////////////////////////////////////////////////////////////////////////////////////////////
+	/// CLUSTER SPLIT PHASE - HOMOGENEITY PHASE ////////////////////////////////////////////////////
+	/// Sub-stage 1: Homogeneity Improvement by moving elements from clusters to more similar ones.
+
 	/// Delete the elements from each cluster that are not very similar to the clustroid
 	for (i = 0; i < this->num_clusters; i++) {
-		c = this->clusters[i];
+		c = temp_clusters[i];
 		rep = c->get_representative();
 
 //		c->display();
@@ -220,11 +224,14 @@ template <class T, class U> void ClusteringAlgorithm<T,U>::MergeSplit() {
 			if (ety) {
 				sim = rep->cosine_similarity( ety );
 
-				if (sim <= Ts) {
+				if (sim <= T_h) {
+//					printf("Remove item %d: %d from cluster", j, ety->get_id());
+//					c->display();
+
 					CoD->insert_entity( ety );
-					this->clusters[i]->delete_entity(j);
+					c->delete_entity(j);
 					deleted_entities++;
-//					printf("Remove item %d : %d", j, ety->get_id()); getchar();
+//					getchar();
 				}
 			}
 		}
@@ -238,27 +245,27 @@ template <class T, class U> void ClusteringAlgorithm<T,U>::MergeSplit() {
 		ety = CoD->get_entity(j);
 
 		for (i = 0; i < this->num_clusters; i++) {
-			sim = ety->cosine_similarity( this->clusters[i]->get_representative() );
+			c = temp_clusters[i];
+			sim = ety->cosine_similarity( c->get_representative() );
 
 			if (sim > max_sim) {
 				k = j;
 				max_sim = sim;
-				cand = this->clusters[i];
+				cand = c;
 			}
 		}
 
 		/// Insert the element in the cluster only if their similarity exceeds the threshold
-		if (max_sim >= Tm && cand != NULL) {
+		if (max_sim >= T_c && cand != NULL) {
 			cand->insert_entity(ety);
 			CoD->delete_entity(k);
 			deleted_entities--;
 		}
 	}
 
-//	for (i = 0; i < this->num_clusters; i++) {
-//		this->clusters[i]->compute_clustroid();
-//	}
+//	printf("Deleted Entities: %d\n", deleted_entities); getchar();
 
+	/// Sub-stage 2: Creation of new Clusters.
 	/// Take care of the rest of the evicted products which were not inserted into a cluster. That
 	/// is, we will create new clusters and insert the most similar products there.
 	onum_clusters = this->num_clusters;
@@ -269,14 +276,14 @@ template <class T, class U> void ClusteringAlgorithm<T,U>::MergeSplit() {
 		if (ety) {
 			if (this->num_clusters >= this->num_alloc_clusters) {
 				this->num_alloc_clusters *= 2;
-				this->clusters = (class Cluster<T> **)realloc
-					(this->clusters, this->num_alloc_clusters * sizeof(class Cluster<T> *));
+				temp_clusters = (class Cluster<T> **)realloc
+					(temp_clusters, this->num_alloc_clusters * sizeof(class Cluster<T> *));
 			}
 
 			if (j == 0) {
-				this->clusters[this->num_clusters] = new Cluster<T>(this->num_clusters);
-				this->clusters[this->num_clusters]->insert_entity(ety);
-				this->clusters[this->num_clusters]->set_representative(ety);
+				temp_clusters[this->num_clusters] = new Cluster<T>(this->num_clusters);
+				temp_clusters[this->num_clusters]->insert_entity(ety);
+				temp_clusters[this->num_clusters]->set_representative(ety);
 				this->num_clusters++;
 
 			} else {
@@ -284,12 +291,13 @@ template <class T, class U> void ClusteringAlgorithm<T,U>::MergeSplit() {
 				max_sim = 0.0;
 
 				for (i = onum_clusters; i < this->num_clusters; i++) {
-					sim = this->clusters[i]->get_representative()->cosine_similarity(ety);
+					c = temp_clusters[i];
+					sim = c->get_representative()->cosine_similarity(ety);
 
 					if (sim > max_sim) {
 						max_sim = sim;
-						if (sim >= Tm) {
-							cand = this->clusters[i];
+						if (sim >= T_c) {
+							cand = c;
 						}
 					}
 				}
@@ -297,9 +305,9 @@ template <class T, class U> void ClusteringAlgorithm<T,U>::MergeSplit() {
 				if (cand) {
 					cand->insert_entity(ety);
 				} else {
-					this->clusters[this->num_clusters] = new Cluster<T>(this->num_clusters);
-					this->clusters[this->num_clusters]->insert_entity(ety);
-					this->clusters[this->num_clusters]->set_representative(ety);
+					temp_clusters[this->num_clusters] = new Cluster<T>(this->num_clusters);
+					temp_clusters[this->num_clusters]->insert_entity(ety);
+					temp_clusters[this->num_clusters]->set_representative(ety);
 					this->num_clusters++;
 				}
 			}
@@ -309,6 +317,113 @@ template <class T, class U> void ClusteringAlgorithm<T,U>::MergeSplit() {
 	}
 
 	delete CoD;
+
+	this->num_alloc_clusters = this->num_clusters;
+
+	////////////////////////////////////////////////////////////////////////////////////////////////
+	/// CLUSTER MERGE PHASE - COMPLETENESS PHASE ///////////////////////////////////////////////////
+	/// Merge Similar clusters similarly to the agglomerative method
+	for (i = 0; i < this->num_clusters; i++) {
+		temp_clusters[i]->compute_clustroid();
+	}
+
+	struct max_similarity {
+		int32_t num_cluster;
+		_score_t max_sim;
+	} max_similarities[this->num_clusters];
+
+	for (i = 0; i < this->num_clusters; i++) {
+		max_similarities[i].num_cluster = -1;
+		max_similarities[i].max_sim = 0.0;
+	}
+
+	/// Initially, for each (singleton) cluster compute the most similar (singleton) cluster
+	for (i = 0; i < this->num_clusters; i++) {
+		max_sim = 0.0;
+		for (j = 0; j < this->num_clusters; j++) {
+			if (i != j) {
+				sim = temp_clusters[i]->get_representative()->cosine_similarity( temp_clusters[j]->get_representative() );
+
+				if (sim > max_sim) {
+					max_sim = sim;
+					max_similarities[i].num_cluster = j;
+					max_similarities[i].max_sim = max_sim;
+				}
+			}
+		}
+	}
+
+	/// Now start merging the clusters
+	continue_merging = true;
+	while(continue_merging) {
+		continue_merging = false;
+		max_sim = 0.0;
+		cand_1 = -1;
+		cand_2 = -1;
+
+		/// Find the pair of the most similar clusters...
+		for (i = 0; i < this->num_alloc_clusters; i++) {
+			if (max_similarities[i].num_cluster >= 0 && max_similarities[i].max_sim >= max_sim) {
+				if (temp_clusters[max_similarities[i].num_cluster]) {
+					max_sim = max_similarities[i].max_sim;
+					cand_1 = i;
+					cand_2 = max_similarities[i].num_cluster;
+				}
+			}
+		}
+
+		/// ... and if their similarity exceeds the threshold...
+		if (max_sim > T_c) {
+			continue_merging = true;
+
+//				printf("Merging cluster %d (%d) with\ncluster %d (%d)\n\n", cand_1,
+//					temp_clusters[cand_1]->get_representative()->get_id(), cand_2,
+//					temp_clusters[cand_2]->get_representative()->get_id());
+
+			/// ... merge them into one. Here we replace the first cluster of the pair with the
+			/// merged one...
+			temp_clusters[cand_1]->merge_with(temp_clusters[cand_2]);
+			temp_clusters[cand_1]->compute_clustroid();
+
+			/// ... and we delete the second one...
+			delete temp_clusters[cand_2];
+			temp_clusters[cand_2] = NULL;
+			max_similarities[cand_2].num_cluster = -1;
+			max_similarities[cand_2].max_sim = 0.0;
+			this->num_clusters--;
+
+			/// For the new merged cluster, compute its distances (similarities) with all the
+			/// other clusters and preserve only the most similar cluster.
+			max_sim = 0.0;
+			for (i = 0; i < this->num_alloc_clusters; i++) {
+				x = i;
+				if (x != cand_1 && temp_clusters[i]) {
+					sim = temp_clusters[cand_1]->get_representative()->cosine_similarity(temp_clusters[i]->get_representative());
+//					printf("Computing Similarity between %d and %d = %5.3f\n", cand_1, i, sim); fflush(NULL);
+
+					if (sim >= max_sim) {
+						max_sim = sim;
+						max_similarities[cand_1].num_cluster = i;
+						max_similarities[cand_1].max_sim = max_sim;
+					}
+				}
+			}
+//				printf("Max Sim: %5.3f\n", max_sim); getchar();
+		}
+	}
+
+	/// Set the final clusters equal to temp_clusters
+	this->clusters = (class Cluster<T> **)malloc(this->num_clusters * sizeof(class Cluster<T> *));
+
+	k = 0;
+	for (i = 0; i < this->num_alloc_clusters; i++) {
+		if (temp_clusters[i]) {
+			this->clusters[k++] = temp_clusters[i];
+		}
+	}
+
+	this->num_alloc_clusters = this->num_clusters;
+	free(temp_clusters);
 }
 
 /// ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -348,6 +463,8 @@ template <class T, class U> void ClusteringAlgorithm<T,U>::evaluate() {
 
 	printf("\nNMI:\t");
 	for (i = low_t; i < high_t; i++) { printf("(%2.1f,%4.3f)", plots[i].th, plots[i].nmi); }
+
+	printf("\n\n"); fflush(NULL);
 }
 
 /// NMI Evaluation

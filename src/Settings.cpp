@@ -3,13 +3,14 @@
 /// Constructor: Set default execution values
 Settings::Settings() :
 	algorithm_name{'\0'}, distance_metric(2),
-	algorithm(6), dataset("uci_news_agg_1.xml"),
+	algorithm(13), dataset("uci_news_agg_1.xml"),
 	dataset_path{'\0'}, results_path{'\0'}, max_entities(1048576),
-	similarity_threshold(0.5), min_distance(1000.0), num_zones(6), low_threshold(0), high_threshold(9),
+	similarity_threshold(0.5), h_threshold(0.4), c_threshold(0.5),
+	min_distance(1000.0), num_zones(6), low_threshold(0), high_threshold(9),
 	entities_type(1),
 	upm_k(2), upm_a(1.0), upm_b(1.0),
 	gsdmm_a(0.1), gsdmm_b(0.1),
-	clusters(200), minpoints(2), iterations(10), linkage(3), kmeans_type(3),
+	clusters(1000), minpoints(2), iterations(10), linkage(3), kmeans_type(3),
 	perform_verification(true), spectral_autotune(false), verbose(true),
 	supported_algorithms(), supported_distances() {
 
@@ -21,7 +22,7 @@ Settings::Settings() :
 		strcpy(this->results_path, "C:/Users/Leon/Documents/Clustering/results/");
 #endif
 
-		/// k-Means, UPM/L2DV, and GSDMM are not affected by similarity thresholds.
+		/// k-Means, UPM/VEPHC, and GSDMM are not affected by similarity thresholds.
 		if (this->algorithm == 11 || this->algorithm == 13 || this->algorithm == 14 || this->algorithm == 15) {
 			this->low_threshold = 0;
 			this->high_threshold = 1;
@@ -36,13 +37,13 @@ Settings::Settings() :
 		this->supported_algorithms.push_back("wdice");		/// 7
 		this->supported_algorithms.push_back("leader");		/// 8
 		this->supported_algorithms.push_back("agglomerative");	/// 9
-		this->supported_algorithms.push_back("dbscan");		/// 10
-		this->supported_algorithms.push_back("kmeans");		/// 11
+		this->supported_algorithms.push_back("DBSCAN");		/// 10
+		this->supported_algorithms.push_back("kMeans");		/// 11
 		this->supported_algorithms.push_back("spectral");	/// 12
 		if (this->entities_type == 1) {						/// 13
-			this->supported_algorithms.push_back("l2dv"); } else {
-			this->supported_algorithms.push_back("upm"); }
-		this->supported_algorithms.push_back("gsdmm");		/// 14
+			this->supported_algorithms.push_back("VEPHC"); } else {
+			this->supported_algorithms.push_back("UPM"); }
+		this->supported_algorithms.push_back("GSDMM");		/// 14
 		this->supported_algorithms.push_back("manual");		/// 15
 
 		strcpy(this->algorithm_name, supported_algorithms[this->algorithm - 1].c_str());
@@ -51,7 +52,7 @@ Settings::Settings() :
 		this->supported_distances.push_back("w-cosine");
 
 		/// Switch between normal Entities ( = 1) and Products ( = 2).
-		if (this->entities_type == 1) {
+		if (this->entities_type == 1 && this->algorithm != 13) {
 			this->perform_verification = false;
 		}
 }
@@ -94,10 +95,19 @@ void Settings::read_from_input(int argc, char ** argv) {
 		"The similarity threshold determines if two entities match or not (Refinement Stage)",
 		false, this->similarity_threshold, "double", cmd);
 
+	TCLAP::ValueArg<_score_t> SimHArg("th", "homogeneity-threshold",
+		"The similarity threshold determines if two entities match or not (Refinement Stage)",
+		false, this->h_threshold, "double", cmd);
+
+	TCLAP::ValueArg<_score_t> SimCArg("tc", "completeness-threshold",
+		"The similarity threshold determines if two entities match or not (VEPHC Refinement Stage)",
+		false, this->c_threshold, "double", cmd);
+
 	/// Execute the algorithm for a range of similarity thresholds: Low/High threshold (Range start/end)
 	TCLAP::ValueArg<int32_t> LowSimTArg("l", "low-sim-threshold",
 		"Execute the algorithm for a range of similarity thresholds: Low threshold (Range start)",
 		false, this->low_threshold, "int", cmd);
+
 	TCLAP::ValueArg<int32_t> HighSimTArg("k", "high-sim-threshold",
 		"Execute the algorithm for a range of similarity thresholds: High threshold (Range end)",
 		false, this->high_threshold, "int", cmd);
@@ -149,6 +159,8 @@ void Settings::read_from_input(int argc, char ** argv) {
 	this->similarity_threshold = SimTArg.getValue();
 	this->low_threshold = LowSimTArg.getValue();
 	this->high_threshold = HighSimTArg.getValue();
+	this->h_threshold = SimHArg.getValue();
+	this->c_threshold = SimCArg.getValue();
 
 	this->upm_a = upmaArg.getValue();
 	this->upm_b = upmbArg.getValue();
@@ -186,6 +198,8 @@ void Settings::set_dataset_path(char * v) { strcpy(this->dataset_path, v); }
 void Settings::set_results_path(char * v) { strcpy(this->results_path, v); }
 void Settings::set_max_entities(uint32_t v) { this->max_entities = v; }
 void Settings::set_similarity_threshold(_score_t v) { this->similarity_threshold = v; }
+void Settings::set_h_threshold(_score_t v) { this->h_threshold = v; }
+void Settings::set_c_threshold(_score_t v) { this->c_threshold = v; }
 void Settings::set_min_distance(_score_t v) { this->min_distance = v; }
 void Settings::set_num_zones(uint16_t v) { this->num_zones = v; }
 void Settings::set_low_threshold(uint16_t v) { this->low_threshold = v; }
@@ -214,6 +228,8 @@ char * Settings::get_dataset_path() { return this->dataset_path; }
 char * Settings::get_results_path() { return this->results_path; }
 uint32_t Settings::get_max_entities() { return this->max_entities; }
 _score_t Settings::get_similarity_threshold() { return this->similarity_threshold; }
+_score_t Settings::get_h_threshold() { return this->h_threshold; }
+_score_t Settings::get_c_threshold() { return this->c_threshold; }
 _score_t Settings::get_min_distance() { return this->min_distance; }
 uint16_t Settings::get_num_zones() { return this->num_zones; }
 uint16_t Settings::get_low_threshold() { return this->low_threshold; }

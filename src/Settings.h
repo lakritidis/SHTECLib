@@ -16,6 +16,8 @@ class Settings {
 
 		/// Universal Settings for Clustering
 		_score_t similarity_threshold;
+		_score_t h_threshold;
+		_score_t c_threshold;
 		_score_t min_distance;
 		uint16_t num_zones;
 		uint16_t low_threshold;
@@ -56,6 +58,8 @@ class Settings {
 		void set_results_path(char *);
 		void set_max_entities(uint32_t);
 		void set_similarity_threshold(_score_t);
+		void set_h_threshold(_score_t);
+		void set_c_threshold(_score_t);
 		void set_min_distance(_score_t);
 		void set_num_zones(uint16_t);
 		void set_low_threshold(uint16_t);
@@ -84,6 +88,8 @@ class Settings {
 		char * get_results_path();
 		uint32_t get_max_entities();
 		_score_t get_similarity_threshold();
+		_score_t get_h_threshold();
+		_score_t get_c_threshold();
 		_score_t get_min_distance();
 		uint16_t get_num_zones();
 		uint16_t get_low_threshold();

@@ -24,9 +24,9 @@ template <class T> class ClusteringMethod {
 			struct match ** matches_array;
 		} ** csim_matches;
 
-		FILE * output_files[9];
+		FILE * output_files[100];
 
-		class EvaluationMeasures evaluators[10];
+		class EvaluationMeasures evaluators[100];
 
 	protected:
 		uint32_t factorial(uint32_t, uint32_t);

@@ -129,8 +129,8 @@ _score_t Combination::compute_score_2(class Settings * sets, class Statistics * 
 //		printf("T-score : %5.3f\n", toks[i]->get_weight()); getchar();
 	}
 
-//	_score_t score = n_score * this->freq / this->num_tokens;
-	_score_t score = n_score * log10(this->freq) / (double)this->num_tokens;
+	_score_t score = n_score * this->freq / this->num_tokens;
+//	_score_t score = n_score * log10(this->freq) / (double)this->num_tokens;
 //	printf("Combination: %s\nIR Score: %5.3f - Score: %5.3f\n", this->signature, ir_score, score); getchar();
 
 	return score;

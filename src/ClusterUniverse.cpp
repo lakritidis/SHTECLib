@@ -108,8 +108,8 @@ template <class T> void ClusterUniverse<T>::insert_node(class UPMProduct * p) {
 	this->hash_table[HashValue] = record;
 }
 
-/// Insert an L2DVEntity into the hash table
-template <class T> void ClusterUniverse<T>::insert_node(class L2DVEntity * p) {
+/// Insert a VEPHCEntity into the hash table
+template <class T> void ClusterUniverse<T>::insert_node(class VEPHCEntity * p) {
 	/// Get the literal of the highest scoring combination of this UPMProduct. This is the hash Key
 	char * c = p->get_predicted_cluster()->get_signature();
 
@@ -118,7 +118,7 @@ template <class T> void ClusterUniverse<T>::insert_node(class L2DVEntity * p) {
 
 	/// Now search in the hash table to check whether this term exists or not
 	if (this->hash_table[HashValue] != NULL) {
-		class ClusterHashNode< L2DVEntity > * q;
+		class ClusterHashNode< VEPHCEntity > * q;
 
 		/// Traverse the linked list that represents the chain.
 		for (q = this->hash_table[HashValue]; q != NULL; q = q->get_next()) {

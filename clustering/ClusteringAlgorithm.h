@@ -19,7 +19,7 @@ template <class T, class U> class ClusteringAlgorithm : public ClusteringMethod<
 		_score_t ** create_affinity_matrix();
 
 		void perform_verification(uint16_t);
-		void MergeSplit();
+		void HC_Stage(Cluster<T> **, _score_t, _score_t);
 
 		void evaluate();
 		double evaluate_nmi(uint32_t);

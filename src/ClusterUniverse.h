@@ -24,7 +24,7 @@ template <class T> class ClusterUniverse {
 
 		class Cluster<T> ** convert_to_array();
 		void insert_node(class UPMProduct *);
-		void insert_node(class L2DVEntity *);
+		void insert_node(class VEPHCEntity *);
 		void insert_cluster(uint32_t, char *, T *);
 		struct match ** create_pairwise_matches(uint32_t *);
 
